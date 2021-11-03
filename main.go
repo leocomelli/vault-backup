@@ -1,6 +1,7 @@
 package main
 
 import (
+	b64 "encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,11 +14,23 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type fnEncode func(interface{}) string
+
 type VaultBackup struct {
 	client  *vault.Client
 	paths   []string
 	secrets map[string]string
 	output  string
+	encode  string
+}
+
+var encode = map[string]fnEncode{
+	"plain": func(v interface{}) string {
+		return fmt.Sprintf("%v", v)
+	},
+	"base64": func(v interface{}) string {
+		return b64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%v", v)))
+	},
 }
 
 func NewBackup() (*VaultBackup, error) {
@@ -29,6 +42,7 @@ func NewBackup() (*VaultBackup, error) {
 	}
 	return &VaultBackup{
 		client: client,
+		encode: "plain",
 	}, nil
 }
 
@@ -94,7 +108,7 @@ func (b *VaultBackup) read(path string) (map[string]string, error) {
 	values := make(map[string]string, len(data))
 
 	for k, v := range data {
-		values[fmt.Sprintf("%s/%s", path, k)] = fmt.Sprintf("%v", v)
+		values[fmt.Sprintf("%s/%s", path, k)] = encode[b.encode](v)
 	}
 
 	return values, nil
@@ -125,13 +139,26 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var paths string
+	var (
+		paths        string
+		base64, help bool
+	)
 
 	flag.StringVar(&client.output, "output", "json", "output format. one of: json|yaml|kv")
 	flag.StringVar(&paths, "paths", "", "comma-separated base path. must end with /")
+	flag.BoolVar(&base64, "base64", false, "encode secret value as base64")
+	flag.BoolVar(&help, "help", false, "show this help output")
 	flag.Parse()
 
+	if help {
+		flag.PrintDefaults()
+		return
+	}
+
 	client.paths = strings.Split(paths, ",")
+	if base64 {
+		client.encode = "base64"
+	}
 
 	if err := client.walk("", client.paths); err != nil {
 		log.Fatal(err)
