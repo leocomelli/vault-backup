@@ -13,8 +13,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var paths = []string{""}
-
 type VaultBackup struct {
 	client  *vault.Client
 	paths   []string
@@ -22,7 +20,7 @@ type VaultBackup struct {
 	output  string
 }
 
-func NewBackup(paths []string) (*VaultBackup, error) {
+func NewBackup() (*VaultBackup, error) {
 	config := vault.DefaultConfig()
 
 	client, err := vault.NewClient(config)
@@ -31,7 +29,6 @@ func NewBackup(paths []string) (*VaultBackup, error) {
 	}
 	return &VaultBackup{
 		client: client,
-		paths:  paths,
 	}, nil
 }
 
@@ -123,13 +120,18 @@ func (b *VaultBackup) format() ([]byte, error) {
 }
 
 func main() {
-	client, err := NewBackup(paths)
+	client, err := NewBackup()
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	var paths string
+
 	flag.StringVar(&client.output, "output", "json", "output format. one of: json|yaml|kv")
+	flag.StringVar(&paths, "paths", "", "comma-separated base path. must end with /")
 	flag.Parse()
+
+	client.paths = strings.Split(paths, ",")
 
 	if err := client.walk("", client.paths); err != nil {
 		log.Fatal(err)
