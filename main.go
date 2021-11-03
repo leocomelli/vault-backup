@@ -51,7 +51,10 @@ func (b *VaultBackup) walk(parent string, paths []string) error {
 			if err != nil {
 				log.Printf("[ERROR] unable to read secret '%s' (%v). \n", p, err)
 			}
-			return b.store(secrets)
+
+			b.store(secrets)
+
+			continue
 		}
 
 		s, err := b.client.Logical().List(fmt.Sprintf("secret/metadata/%s", p))
