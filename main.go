@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var paths = []string{"staging/", "production/"}
+var paths = []string{""}
 
 type VaultBackup struct {
 	client  *vault.Client
@@ -44,7 +44,7 @@ func (b *VaultBackup) walk(parent string, paths []string) error {
 			p = fmt.Sprintf("%s%s", parent, p)
 		}
 
-		if !strings.HasSuffix(p, "/") {
+		if p != "" && !strings.HasSuffix(p, "/") {
 			log.Printf("- reading %s", p)
 
 			secrets, err := b.read(fmt.Sprintf("secret/data/%s", p))
