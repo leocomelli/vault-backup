@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	b64 "encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	vault "github.com/hashicorp/vault/api"
@@ -17,11 +19,12 @@ import (
 type fnEncode func(interface{}) string
 
 type VaultBackup struct {
-	client  *vault.Client
-	paths   []string
-	secrets map[string]string
-	output  string
-	encode  string
+	client   *vault.Client
+	paths    []string
+	secrets  map[string]string
+	output   string
+	encode   string
+	filename string
 }
 
 var encode = map[string]fnEncode{
@@ -124,13 +127,33 @@ func (b *VaultBackup) format() ([]byte, error) {
 
 		return buf, nil
 	case "json":
-		return json.Marshal(b.secrets)
+		buf, err := json.Marshal(b.secrets)
+		if err != nil {
+			return nil, err
+		}
+
+		var out bytes.Buffer
+		err = json.Indent(&out, buf, "", "\t")
+		if err != nil {
+			return nil, err
+		}
+
+		return out.Bytes(), nil
 	case "yaml":
 	case "yml":
 		return yaml.Marshal(b.secrets)
 	}
 
 	return nil, errors.New("unsupported format")
+}
+
+func (b *VaultBackup) write() error {
+	out, err := b.format()
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(b.filename, out, 0644)
 }
 
 func main() {
@@ -147,6 +170,7 @@ func main() {
 	flag.StringVar(&client.output, "output", "json", "output format. one of: json|yaml|kv")
 	flag.StringVar(&paths, "paths", "", "comma-separated base path. must end with /")
 	flag.BoolVar(&base64, "base64", false, "encode secret value as base64")
+	flag.StringVar(&client.filename, "filename", "vault.backup", "output filename")
 	flag.BoolVar(&help, "help", false, "show this help output")
 	flag.Parse()
 
@@ -164,11 +188,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	out, err := client.format()
-	if err != nil {
-		log.Fatal("[ERROR] error formating the output (%v). \n", err)
+	if err = client.write(); err != nil {
+		log.Fatal(err)
 	}
 
-	log.Println(string(out))
-
+	log.Println("done! ;)")
 }
