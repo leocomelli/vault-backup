@@ -80,6 +80,11 @@ func (b *VaultBackup) read(path string) (map[string]string, error) {
 		return nil, errors.Wrapf(err, "unable to read secret '%s'\n", path)
 	}
 
+	if secret == nil || secret.Data["data"] == nil {
+		log.Printf("[ERROR] no version found for '%s'. \n", path)
+		return map[string]string{}, nil
+	}
+
 	data := secret.Data["data"].(map[string]interface{})
 
 	values := make(map[string]string, len(data))
