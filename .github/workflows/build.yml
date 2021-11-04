@@ -1,0 +1,32 @@
+name: Build
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  test-build:
+    name: Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set up Go 1.17
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.17.1'
+
+    - name: Set GOPATH and PATH
+      run: |
+        echo "GOPATH=$(dirname $GITHUB_WORKSPACE)" >> $GITHUB_ENV
+        echo "$(dirname $GITHUB_WORKSPACE)/bin" >> $GITHUB_PATH
+      shell: bash
+
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Update build dependencies
+      run: make setup
+
+    - name: Build
+      run: make bin
+

@@ -6,7 +6,7 @@ require (
 	github.com/hashicorp/vault/api v1.3.0
 	github.com/imdario/mergo v0.3.12
 	github.com/pkg/errors v0.9.1
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

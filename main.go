@@ -18,6 +18,7 @@ import (
 
 type fnEncode func(interface{}) string
 
+// VaultBackup is all ths information required to make a backup
 type VaultBackup struct {
 	client   *vault.Client
 	paths    []string
@@ -36,6 +37,7 @@ var encode = map[string]fnEncode{
 	},
 }
 
+// NewBackup creates a new backup
 func NewBackup() (*VaultBackup, error) {
 	config := vault.DefaultConfig()
 
@@ -56,7 +58,7 @@ func (b *VaultBackup) store(src map[string]string) error {
 	return nil
 }
 
-func (b *VaultBackup) walk(parent string, paths []string) error {
+func (b *VaultBackup) walk(parent string, paths []string) {
 	for _, p := range paths {
 		if p != "" {
 			p = fmt.Sprintf("%s%s", parent, p)
@@ -70,7 +72,9 @@ func (b *VaultBackup) walk(parent string, paths []string) error {
 				log.Printf("[ERROR] unable to read secret '%s' (%v). \n", p, err)
 			}
 
-			b.store(secrets)
+			if err := b.store(secrets); err != nil {
+				log.Printf("[ERROR] unabled to merge the secrets (%v)", err)
+			}
 
 			continue
 		}
@@ -91,8 +95,6 @@ func (b *VaultBackup) walk(parent string, paths []string) error {
 			b.walk(p, keys)
 		}
 	}
-
-	return nil
 }
 
 func (b *VaultBackup) read(path string) (map[string]string, error) {
@@ -153,7 +155,7 @@ func (b *VaultBackup) write() error {
 		return err
 	}
 
-	return os.WriteFile(b.filename, out, 0644)
+	return os.WriteFile(b.filename, out, 0600)
 }
 
 func main() {
@@ -184,9 +186,7 @@ func main() {
 		client.encode = "base64"
 	}
 
-	if err := client.walk("", client.paths); err != nil {
-		log.Fatal(err)
-	}
+	client.walk("", client.paths)
 
 	if err = client.write(); err != nil {
 		log.Fatal(err)
