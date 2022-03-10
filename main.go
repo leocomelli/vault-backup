@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -40,7 +41,8 @@ var encode = map[string]fnEncode{
 // NewBackup creates a new backup
 func NewBackup() (*VaultBackup, error) {
 	config := vault.DefaultConfig()
-
+	tlsInsecure := vault.TLSConfig{Insecure: true}
+	config.ConfigureTLS(&tlsInsecure)
 	client, err := vault.NewClient(config)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to initialize vault client")
@@ -67,7 +69,7 @@ func (b *VaultBackup) walk(parent string, paths []string) {
 		if p != "" && !strings.HasSuffix(p, "/") {
 			log.Printf("- reading %s", p)
 
-			secrets, err := b.read(fmt.Sprintf("secret/data/%s", p))
+			secrets, err := b.read(fmt.Sprintf("secret/%s", p))
 			if err != nil {
 				log.Printf("[ERROR] unable to read secret '%s' (%v). \n", p, err)
 			}
@@ -79,7 +81,7 @@ func (b *VaultBackup) walk(parent string, paths []string) {
 			continue
 		}
 
-		s, err := b.client.Logical().List(fmt.Sprintf("secret/metadata/%s", p))
+		s, err := b.client.Logical().List(fmt.Sprintf("secret/%s", p))
 		if err != nil {
 			log.Printf("[ERROR] unable to list secret '%s' (%v). \n", p, err)
 		}
@@ -97,18 +99,68 @@ func (b *VaultBackup) walk(parent string, paths []string) {
 	}
 }
 
+func (b *VaultBackup) readJson(filename string) (map[string]interface{}, error) {
+
+	var jsonMap map[string]interface{}
+	jsonFile, err := os.Open(filename)
+
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	defer jsonFile.Close()
+
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+
+	json.Unmarshal(byteValue, &jsonMap)
+
+	return jsonMap, nil
+}
+
+func (b *VaultBackup) writeSecrets(secrets map[string]interface{}) error {
+	currentPath := ""
+
+	secret := ""
+	secretPath := ""
+	keyLength := 0
+
+	for key, element := range secrets {
+
+		secretPath = key[0:strings.LastIndex(key, "/")]
+		//fmt.Println("Path:", secretPath)
+		keyLength = len(key)
+
+		if currentPath == secretPath {
+			secret = secret + ",\"" + key[strings.LastIndex(key, "/")+1:keyLength] + "\"" + ":" + "\"" + element.(string) + "\""
+		} else {
+			if secret != "" {
+				secret = secret + "}"
+				// call write method
+				fmt.Println(currentPath)
+				fmt.Println(secret)
+				b.client.Logical().Write()
+			}
+			secret = "{\"" + key[strings.LastIndex(key, "/")+1:keyLength] + "\"" + ":" + "\"" + element.(string) + "\""
+
+		}
+
+		currentPath = secretPath
+	}
+
+	return nil
+}
+
 func (b *VaultBackup) read(path string) (map[string]string, error) {
 	secret, err := b.client.Logical().Read(path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to read secret '%s'\n", path)
 	}
 
-	if secret == nil || secret.Data["data"] == nil {
+	if secret == nil {
 		log.Printf("[ERROR] no version found for '%s'. \n", path)
 		return map[string]string{}, nil
 	}
 
-	data := secret.Data["data"].(map[string]interface{})
+	data := secret.Data
 
 	values := make(map[string]string, len(data))
 
@@ -165,10 +217,12 @@ func main() {
 	}
 
 	var (
+		process      string
 		paths        string
 		base64, help bool
 	)
 
+	flag.StringVar(&process, "process", "backup", "Process type backup|write.")
 	flag.StringVar(&client.output, "output", "json", "output format. one of: json|yaml|kv")
 	flag.StringVar(&paths, "paths", "", "comma-separated base path. must end with /")
 	flag.BoolVar(&base64, "base64", false, "encode secret value as base64")
@@ -181,16 +235,30 @@ func main() {
 		return
 	}
 
-	client.paths = strings.Split(paths, ",")
-	if base64 {
-		client.encode = "base64"
+	if process == "write" {
+		client.readJson(client.filename)
+		jsonS, err := client.readJson("vault.backup.json")
+
+		if err != nil {
+			log.Fatal("Can't read Json to Write secrets")
+		}
+
+		client.writeSecrets(jsonS)
+		log.Println("Writing secrets done! ;)")
+
+	} else {
+		client.paths = strings.Split(paths, ",")
+		if base64 {
+			client.encode = "base64"
+		}
+
+		client.walk("", client.paths)
+
+		if err = client.write(); err != nil {
+			log.Fatal(err)
+		}
+
+		log.Println("Backup done! ;)")
 	}
 
-	client.walk("", client.paths)
-
-	if err = client.write(); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("done! ;)")
 }
