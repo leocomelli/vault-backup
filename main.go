@@ -117,9 +117,8 @@ func (b *VaultBackup) readJson(filename string) (map[string]interface{}, error) 
 }
 
 func (b *VaultBackup) writeSecrets(secrets map[string]interface{}) error {
+	secretMap := make(map[string]interface{})
 	currentPath := ""
-
-	secret := ""
 	secretPath := ""
 	keyLength := 0
 
@@ -129,18 +128,12 @@ func (b *VaultBackup) writeSecrets(secrets map[string]interface{}) error {
 		//fmt.Println("Path:", secretPath)
 		keyLength = len(key)
 
-		if currentPath == secretPath {
-			secret = secret + ",\"" + key[strings.LastIndex(key, "/")+1:keyLength] + "\"" + ":" + "\"" + element.(string) + "\""
-		} else {
-			if secret != "" {
-				secret = secret + "}"
-				// call write method
-				fmt.Println(currentPath)
-				fmt.Println(secret)
-				b.client.Logical().Write()
-			}
-			secret = "{\"" + key[strings.LastIndex(key, "/")+1:keyLength] + "\"" + ":" + "\"" + element.(string) + "\""
+		secretMap[key[strings.LastIndex(key, "/")+1:keyLength]] = element.(string)
 
+		if currentPath != secretPath {
+			fmt.Printf("%v", secretMap)
+			// call write method
+			b.client.Logical().Write(currentPath, secretMap)
 		}
 
 		currentPath = secretPath
