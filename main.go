@@ -21,12 +21,13 @@ type fnEncode func(interface{}) string
 
 // VaultBackup is all ths information required to make a backup
 type VaultBackup struct {
-	client   *vault.Client
-	paths    []string
-	secrets  map[string]string
-	output   string
-	encode   string
-	filename string
+	client     *vault.Client
+	paths      []string
+	secrets    map[string]string
+	output     string
+	encode     string
+	filename   string
+	pathPrefix string
 }
 
 var encode = map[string]fnEncode{
@@ -118,9 +119,11 @@ func (b *VaultBackup) readJson(filename string) (map[string]interface{}, error) 
 
 func (b *VaultBackup) writeSecrets(secrets map[string]interface{}) error {
 	secretMap := make(map[string]interface{})
+	secretMapWrap := make(map[string]interface{})
 	currentPath := ""
 	secretPath := ""
 	keyLength := 0
+	secretNumber := 0
 
 	for key, element := range secrets {
 
@@ -130,10 +133,18 @@ func (b *VaultBackup) writeSecrets(secrets map[string]interface{}) error {
 
 		secretMap[key[strings.LastIndex(key, "/")+1:keyLength]] = element.(string)
 
-		if currentPath != secretPath {
-			fmt.Printf("%v", secretMap)
+		if currentPath != secretPath && currentPath != "" {
+			secretNumber++
+			fmt.Printf("Write secret %d\n", secretNumber)
+			secretMapWrap["data"] = secretMap
+			fmt.Printf("%v\n", secretMapWrap)
 			// call write method
-			b.client.Logical().Write(currentPath, secretMap)
+			_, err := b.client.Logical().Write(b.pathPrefix+currentPath, secretMapWrap)
+
+			if err != nil {
+				return err
+			}
+
 		}
 
 		currentPath = secretPath
@@ -220,6 +231,7 @@ func main() {
 	flag.StringVar(&paths, "paths", "", "comma-separated base path. must end with /")
 	flag.BoolVar(&base64, "base64", false, "encode secret value as base64")
 	flag.StringVar(&client.filename, "filename", "vault.backup", "output filename")
+	flag.StringVar(&client.pathPrefix, "prefix", "", "Vault path Prefix")
 	flag.BoolVar(&help, "help", false, "show this help output")
 	flag.Parse()
 
@@ -236,7 +248,10 @@ func main() {
 			log.Fatal("Can't read Json to Write secrets")
 		}
 
-		client.writeSecrets(jsonS)
+		err = client.writeSecrets(jsonS)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
 		log.Println("Writing secrets done! ;)")
 
 	} else {
