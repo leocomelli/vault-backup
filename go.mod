@@ -3,7 +3,7 @@ module github.com/leocomelli/vault-backup
 go 1.17
 
 require (
-	github.com/hashicorp/vault/api v1.9.2
+	github.com/hashicorp/vault/api v1.10.0
 	github.com/imdario/mergo v0.3.16
 	github.com/pkg/errors v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
